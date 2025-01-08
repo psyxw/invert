@@ -14,7 +14,7 @@ class InverseOperator:
 
     Parameters
     ----------
-    inverse operator : 
+    inverse operator :
     Return
     ------
     '''
@@ -36,7 +36,7 @@ class InverseOperator:
         if type(self.data) != list:
             self.data = [self.data,]
         self.type = type(self.data[0])
-    
+
     def apply(self, M):
         ''' Apply the precomputed inverse operator to the data matrix M.
         Parameters
@@ -49,23 +49,23 @@ class InverseOperator:
         J : numpy.ndarray
             The source estimate matrix (n_sources, n_timepoints)
         '''
- 
+
         J = self.data @ M
         if len(J.shape) > 2:
             J = np.squeeze(J)
         return J
-        
+
 class BaseSolver:
     '''
     Parameters
     ----------
     regularisation_method : str
-        Can be either 
+        Can be either
             "GCV"       -> generalized cross validation
             "L"         -> L-Curve method using triangle method
             "Product"   -> Minimal product method
     n_reg_params : int
-        The number of regularisation parameters to try. The higher, the 
+        The number of regularisation parameters to try. The higher, the
         more accurate the regularisation and the slower the computations.
     prep_leadfield : bool
         If True -> Apply common average referencing and normalisation of the leadfield columns.
@@ -73,13 +73,13 @@ class BaseSolver:
         Whether to reduce the rank of the M/EEG data
     rank : str/int
         Can be either int -> select only the <rank> largest eigenvectors of the data
-        "auto" -> automatically select the optimal rank using the L-curve method and 
+        "auto" -> automatically select the optimal rank using the L-curve method and
                   an eigenvalue drop-off criterion
     plot_reg : bool
         Plot the regularization parameters.
 
     '''
-    def __init__(self, regularisation_method="GCV", n_reg_params=11, 
+    def __init__(self, regularisation_method="GCV", n_reg_params=11,
         prep_leadfield=False, use_last_alpha=False, rank="auto",
         reduce_rank=False, plot_reg=False, common_average_reference=False, verbose=0):
         self.verbose = verbose
@@ -115,7 +115,7 @@ class BaseSolver:
         Return
         ------
         None
-        
+
         """
         self.forward = deepcopy(forward)
         self.prepare_forward()
@@ -128,42 +128,42 @@ class BaseSolver:
             self.tmin = mne_obj.tmin
         else:
             self.tmin = 0
-        
+
         self.obj_info = mne_obj.info
-        
+
     def apply_inverse_operator(self, mne_obj) -> mne.SourceEstimate:
         ''' Apply the inverse operator
-        
+
         Parameters
         ----------
         mne_obj : [mne.Evoked, mne.Epochs, mne.io.Raw]
             The MNE data object.
-        
+
         Return
         ------
         stc : mne.SourceEstimate
             The mne SourceEstimate object.
-        
+
         '''
-        
+
         data = self.unpack_data_obj(mne_obj)
 
         # if type(self.inverse_operators[0].data) == list:
         #     M = data
-            
+
         #     maximum_a_posteriori, A, S = self.inverse_operators[0].data
         #     # transform data M with spatial (A) and temporal (S) projector
         #     M_ = A @ M @ S
         #     # invert transformed data M_ to tansformed sources J_
         #     J_ = maximum_a_posteriori @ M_
         #     # Project tansformed sources J_ back to original time frame using temporal projector S
-        #     source_mat = J_ @ S.T 
+        #     source_mat = J_ @ S.T
         #     stc = self.source_to_object(source_mat)
         #     return stc
-        
+
         if self.use_last_alpha and self.last_reg_idx is not None:
-            source_mat = self.inverse_operators[self.last_reg_idx].apply( data ) 
-            
+            source_mat = self.inverse_operators[self.last_reg_idx].apply( data )
+
         else:
             if self.regularisation_method.lower() == "l":
                 source_mat, idx = self.regularise_lcurve(data, plot=self.plot_reg)
@@ -177,15 +177,15 @@ class BaseSolver:
             else:
                 msg = f"{self.regularisation_method} is no valid regularisation method."
                 raise AttributeError(msg)
-            
+
         stc = self.source_to_object(source_mat)
         return stc
-        
-    
+
+
     def prep_data(self, mne_obj):
         if not mne_obj.proj and "eeg" in mne_obj.get_channel_types() and self.common_average_reference:
             mne_obj.set_eeg_reference("average", projection=True, verbose=0).apply_proj(verbose=0)
-        
+
         return mne_obj
 
     def unpack_data_obj(self, mne_obj, pick_types=None):
@@ -202,11 +202,11 @@ class BaseSolver:
 
         '''
 
-        type_list = [mne.Evoked, mne.EvokedArray, mne.Epochs, mne.EpochsArray, mne.io.Raw, mne.io.RawArray,]  # mne.io.brainvision.brainvision.RawBrainVision]
+        type_list = [mne.Evoked, mne.EvokedArray, mne.BaseEpochs, mne.io.BaseRaw]
         if pick_types is None:
             pick_types = ["meg", "eeg", "fnirs"]
         assert type(pick_types) != dict(), f"pick_types must be of type str or list(str), but is of type dict()"
-        
+
         # Prepare Data
         mne_obj = self.prep_data(mne_obj)
         mne_obj_meeg = mne_obj.copy().pick(pick_types)
@@ -214,16 +214,16 @@ class BaseSolver:
         channels_in_fwd = self.forward.ch_names
         channels_in_mne_obj = mne_obj_meeg.ch_names
         picks = self.select_list_intersection(channels_in_fwd, channels_in_mne_obj)
-        
+
         # Select only data channels in mne_obj
         mne_obj_meeg.pick(picks)
-        
+
         # Store original forward model for later
         self.forward_original = deepcopy(self.forward)
 
         # Select only available data channels in forward
         self.forward = self.forward.pick_channels(picks)
-        
+
         # Prepare the potentially new forward model
         self.prepare_forward()
 
@@ -235,13 +235,13 @@ class BaseSolver:
         if isinstance(mne_obj, (mne.Evoked, mne.EvokedArray)):
             # handle evoked object
             data = mne_obj_meeg.data
-        
-        # check if the object is a raw object
-        elif isinstance(mne_obj, (mne.Epochs, mne.EpochsArray)):
+
+        # check if the object is a epoch object
+        elif isinstance(mne_obj, mne.BaseEpochs):
             data = mne_obj_meeg.average().data
-        
+
         # check if the object is a raw object
-        elif isinstance(mne_obj, (mne.io.Raw, mne.io.RawArray, mne.io.brainvision.brainvision.RawBrainVision)):
+        elif isinstance(mne_obj, mne.io.BaseRaw):
             # handle raw object
             data = mne_obj_meeg._data
             # data = mne_obj_meeg.get_data()
@@ -250,14 +250,14 @@ class BaseSolver:
         else:
             msg = f"mne_obj is of type {type(mne_obj)} but needs to be one of the following types: {type_list}"
             raise AttributeError(msg)
-        
+
         self.store_obj_information(mne_obj)
 
         if self.reduce_rank:
             data = self.select_signal_subspace(data, rank=self.rank)
-        
+
         return data
-    
+
     @staticmethod
     def select_list_intersection(list1, list2):
         new_list = []
@@ -275,7 +275,7 @@ class BaseSolver:
         reference : [None, numpy.ndarray]
             If None: use leadfield to calculate regularization parameters, else
             use reference matrix (e.g., M/EEG covariance matrix).
-        
+
         Return
         ------
         alphas : list
@@ -284,7 +284,7 @@ class BaseSolver:
         '''
         if reference is None:
             L = self.leadfield
-            _, eigs, _ = np.linalg.svd(L@L.T, full_matrices=False) 
+            _, eigs, _ = np.linalg.svd(L@L.T, full_matrices=False)
         else:
             _, eigs, _ = np.linalg.svd(reference, full_matrices=False)
         self.max_eig = eigs.max()
@@ -297,40 +297,40 @@ class BaseSolver:
 
     def regularise_lcurve(self, M, plot=False):
         """ Find optimally regularized inverse solution using the L-Curve method [1].
-        
+
         Parameters
         ----------
         M : numpy.ndarray
             The M/EEG data matrix (n_channels, n_timepoints)
-        
+
         Return
         ------
         source_mat : numpy.ndarray
             The inverse solution  (dipoles x time points)
         optimum_idx : int
             The index of the selected (optimal) regularization parameter
-        
+
         References
         ----------
         [1] Grech, R., Cassar, T., Muscat, J., Camilleri, K. P., Fabri, S. G.,
         Zervakis, M., ... & Vanrumste, B. (2008). Review on solving the inverse
         problem in EEG source analysis. Journal of neuroengineering and
         rehabilitation, 5(1), 1-33.
-        
+
         """
 
         leadfield = self.leadfield
         source_mats = [inverse_operator.apply( M ) for inverse_operator in self.inverse_operators]
-        
+
         # M -= M.mean(axis=0)
         # leadfield -= leadfield.mean(axis=0)
-        
+
 
         # l2_norms = [np.log(np.linalg.norm( leadfield @ source_mat )) for source_mat in source_mats]
         # l2_norms = [np.log(np.linalg.norm(source_mat )) for source_mat in source_mats]
         l2_norms = [np.linalg.norm( source_mat ) for source_mat in source_mats]
-        
-        
+
+
         # residual_norms = [np.log(np.linalg.norm( leadfield @ source_mat - M )) for source_mat in source_mats]
         residual_norms = [np.linalg.norm( leadfield @ source_mat - M ) for source_mat in source_mats]
 
@@ -340,9 +340,9 @@ class BaseSolver:
         # bad_idc = self.filter_norms(self.r_values, l2_norms)
         # l2_norms = np.delete(l2_norms, bad_idc)
         # source_mats = self.delete_from_list(source_mats, bad_idc)
-        
+
         optimum_idx = self.find_corner(l2_norms, residual_norms)
-        
+
         # curvature = self.get_curvature(residual_norms, l2_norms)
         # print(curvature)
 
@@ -358,10 +358,10 @@ class BaseSolver:
             plt.title(f"L-Curve: {alpha}")
 
         return source_mat, optimum_idx
-        
+
     @staticmethod
     def get_curvature(x, y):
-        
+
         x_t = np.gradient(x)
         y_t = np.gradient(y)
         vel = np.array([ [x_t[i], y_t[i]] for i in range(x_t.size)])
@@ -379,19 +379,19 @@ class BaseSolver:
     def regularise_gcv(self, M, plot=False):
         """ Find optimally regularized inverse solution using the generalized
         cross-validation method [1].
-        
+
         Parameters
         ----------
         M : numpy.ndarray
             The M/EEG data matrix (n_channels, n_timepoints)
-        
+
         Return
         ------
         source_mat : numpy.ndarray
             The inverse solution  (dipoles x time points)
         optimum_idx : int
             The index of the selected (optimal) regularization parameter
-        
+
         References
         ----------
         [1] Grech, R., Cassar, T., Muscat, J., Camilleri, K. P., Fabri, S. G.,
@@ -403,16 +403,16 @@ class BaseSolver:
         n_chans = self.leadfield.shape[0]
         # Common Average Reference
         # M -= M.mean(axis=0)
-        
+
         I = np.identity(n_chans)
         gcv_values = []
         for inverse_operator in self.inverse_operators:
             x = inverse_operator.apply( M )
-            M_hat = self.leadfield @ x 
+            M_hat = self.leadfield @ x
             # M_hat -= M_hat.mean(axis=0)
             residual_norm = np.linalg.norm(M_hat- M)
             denom = np.trace(I - self.leadfield @ inverse_operator.data[0])**2
-    
+
             gcv_value = residual_norm / denom
             gcv_values.append(gcv_value)
             # print(np.linalg.norm(x), gcv_value)
@@ -425,7 +425,7 @@ class BaseSolver:
         #         keep_idx = 1
         # else:
         #     keep_idx = np.where((np.diff(gcv_values)<0))[0][0]
-            
+
         optimum_idx = np.argmin(gcv_values[keep_idx:])+keep_idx
 
         # optimum_idx = np.argmin(gcv_values[1:])+1
@@ -442,19 +442,19 @@ class BaseSolver:
 
     def regularise_product(self, M, plot=False):
         """ Find optimally regularized inverse solution using the product method [1].
-        
+
         Parameters
         ----------
         M : numpy.ndarray
             The M/EEG data matrix (n_channels, n_timepoints)
-        
+
         Return
         ------
         source_mat : numpy.ndarray
             The inverse solution  (dipoles x time points)
         optimum_idx : int
             The index of the selected (optimal) regularization parameter
-        
+
         References
         ----------
         [1] Grech, R., Cassar, T., Muscat, J., Camilleri, K. P., Fabri, S. G.,
@@ -472,11 +472,11 @@ class BaseSolver:
             M_hat = self.leadfield@x
             residual_norm = np.linalg.norm(M_hat - M)
             semi_norm = np.linalg.norm(x)
-            product_value = semi_norm * residual_norm 
+            product_value = semi_norm * residual_norm
             product_values.append(product_value)
 
         optimum_idx = np.argmin(product_values)
-        
+
         if plot:
             plt.figure()
             plt.plot(self.alphas, product_values)
@@ -506,7 +506,7 @@ class BaseSolver:
             Levels of regularization
         l2_norms : list
             L2 norms of the inverse solutions per level of regularization.
-        
+
         Return
         ------
         idx : int
@@ -531,30 +531,30 @@ class BaseSolver:
         else:
             idx = 0
         return idx
-    
+
     @staticmethod
     def select_signal_subspace(data_matrix, rank="auto"):
-    
+
         # Compute the SVD of the data matrix
         U, S, V = np.linalg.svd(data_matrix, full_matrices=False)
-        
+
         if rank == "auto":
             iters = np.arange(len(S))
             n_comp_L = find_corner(deepcopy(iters), deepcopy(S))
-            
+
             # Based on eigenvalue drop-off
             S_ = S/S.max()
-            
+
             n_comp_drop = np.where( abs(np.diff(S_)) < 0.001 )[0]
             if len(n_comp_drop) > 0:
                 n_comp_drop = n_comp_drop[0] + 2
             else:
                 n_comp_drop = n_comp_L
-            
+
             # Combine the two:
             rank = np.ceil((n_comp_drop + n_comp_L)/2).astype(int)
-            
-        
+
+
 
         # Select the top `rank` singular values and corresponding singular vectors
         U_subset = U[:, :rank]
@@ -576,7 +576,7 @@ class BaseSolver:
             List or array of r-values
         l2_norms : [list, numpy.ndarray]
             List or array of l2_norms
-        
+
         Return
         ------
         bad_idc : list
@@ -602,7 +602,7 @@ class BaseSolver:
 
         Parameters
         ----------
-        
+
 
         Return
         ------
@@ -613,13 +613,13 @@ class BaseSolver:
             print("Forward model has free source orientation. This is currently not possible, converting to fixed.")
             # convert to fixed
             self.forward = mne.convert_forward_solution(self.forward, force_fixed=True, verbose=0)
-        
+
         self.leadfield = deepcopy(self.forward["sol"]["data"])
-        
+
         if self.prep_leadfield:
             # self.leadfield -= self.leadfield.mean(axis=0)
             self.leadfield /= np.linalg.norm(self.leadfield, axis=0)
-            
+
 
     @staticmethod
     def euclidean_distance(A, B):
@@ -632,7 +632,7 @@ class BaseSolver:
         s = (AB + AC + CB) / 2
         area = (s*(s-AB)*(s-AC)*(s-CB)) ** 0.5
         return area
-        
+
     def source_to_object(self, source_mat):
         ''' Converts the source_mat matrix to the mne.SourceEstimate object.
 
@@ -644,7 +644,7 @@ class BaseSolver:
         Return
         ------
         stc : mne.SourceEstimate
-        
+
         '''
         # Convert source to mne.SourceEstimate object
         source_model = self.forward['src']
@@ -659,12 +659,12 @@ class BaseSolver:
         # else assume fsaverage as subject id
         else:
             subject = "fsaverage"
-        
+
         stc = mne.SourceEstimate(source_mat, vertices, tmin=tmin, tstep=tstep, subject=subject, verbose=self.verbose)
         return stc
-    
+
     def save(self, path):
-        ''' Saves the solver object. 
+        ''' Saves the solver object.
 
         Paramters
         ---------
@@ -675,7 +675,7 @@ class BaseSolver:
         self : BaseSolver
             Function returns itself.
         '''
-    
+
         name = self.name
 
         # get list of folders in path
@@ -685,7 +685,7 @@ class BaseSolver:
             # create path
             os.mkdir(path)
             list_of_folders = []
-            
+
         model_ints = []
         for folder in list_of_folders:
             full_path = os.path.join(path, folder)
@@ -712,10 +712,10 @@ class BaseSolver:
             self.generator = None
             if hasattr(self, "history"):
                 self.history = None
-            
+
             with open(new_path + '\\instance.pkl', 'wb') as f:
                 pkl.dump(self, f, protocol=pkl.HIGHEST_PROTOCOL)
-            
+
             # Attach model again now that everything is saved
             try:
                 self.model = tf.keras.models.load_model(new_path, custom_objects={'loss': self.loss})
