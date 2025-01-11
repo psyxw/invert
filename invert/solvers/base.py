@@ -136,7 +136,7 @@ class BaseSolver:
 
         Parameters
         ----------
-        mne_obj : [mne.Evoked, mne.Epochs, mne.io.Raw]
+        mne_obj : [mne.Evoked, mne.Epochs, mne.Raw]
             The MNE data object.
 
         Return
@@ -193,7 +193,7 @@ class BaseSolver:
 
         Parameters
         ----------
-        mne_obj : [mne.Evoked, mne.EvokedArray, mne.Epochs, mne.EpochsArray, mne.Raw]
+        mne_obj : [mne.Evoked, mne.Epochs, mne.Raw]
 
         Return
         ------
@@ -202,10 +202,10 @@ class BaseSolver:
 
         '''
 
-        type_list = [mne.Evoked, mne.EvokedArray, mne.BaseEpochs, mne.io.BaseRaw]
+        type_list = [mne.Evoked, mne.BaseEpochs, mne.io.BaseRaw]
         if pick_types is None:
             pick_types = ["meg", "eeg", "fnirs"]
-        assert type(pick_types) != dict(), f"pick_types must be of type str or list(str), but is of type dict()"
+        assert not isinstance(pick_types, dict), f"pick_types must be of type str or list(str), but is of type dict()"
 
         # Prepare Data
         mne_obj = self.prep_data(mne_obj)
@@ -232,19 +232,21 @@ class BaseSolver:
         assert len(self.forward.ch_names) > 1, "forward model contains only a single channel"
 
         # check if the object is an evoked object
-        if isinstance(mne_obj, (mne.Evoked, mne.EvokedArray)):
+        if isinstance(mne_obj, mne.Evoked):
             # handle evoked object
-            data = mne_obj_meeg.data
-
-        # check if the object is a epoch object
-        elif isinstance(mne_obj, mne.BaseEpochs):
-            data = mne_obj_meeg.average().data
+            data = mne_obj_meeg.get_data()
 
         # check if the object is a raw object
         elif isinstance(mne_obj, mne.io.BaseRaw):
             # handle raw object
-            data = mne_obj_meeg._data
-            # data = mne_obj_meeg.get_data()
+            data = mne_obj_meeg.get_data()
+
+        # check if the object is an epoch object
+        elif isinstance(mne_obj, mne.BaseEpochs):
+            data = mne_obj_meeg.get_data()  # (n_epo, n_chn, n_time)
+            n_epo, n_chn, n_time = data.shape
+            data = data.swapaxes(1, 2).reshape(n_epo * n_time, n_chn).T  # (n_chn, n_epo * n_time)
+            self._epoch_info = [n_epo, n_chn, n_time]
 
         # handle other cases
         else:
@@ -639,11 +641,11 @@ class BaseSolver:
         Parameters
         ----------
         source_mat : numpy.ndarray
-            Source matrix (dipoles, time points)-
+            Source matrix (dipoles, time points)
 
         Return
         ------
-        stc : mne.SourceEstimate
+        stc : mne.SourceEstimate | list of mne.SourceEstimate
 
         '''
         # Convert source to mne.SourceEstimate object
@@ -660,7 +662,17 @@ class BaseSolver:
         else:
             subject = "fsaverage"
 
-        stc = mne.SourceEstimate(source_mat, vertices, tmin=tmin, tstep=tstep, subject=subject, verbose=self.verbose)
+        kwargs = dict(vertices=vertices, tmin=tmin, tstep=tstep, subject=subject, verbose=self.verbose)
+
+        # Handling epoch data
+        if hasattr(self, "_epoch_info"):
+            n_epo, _, n_time = self._epoch_info
+            n_dip = source_mat.shape[0]
+            source_mat = source_mat.reshape(n_dip, n_epo, n_time).swapaxes(0, 1)
+            stc = [mne.SourceEstimate(i, **kwargs) for i in source_mat]
+        else:
+            stc = mne.SourceEstimate(source_mat, **kwargs)
+
         return stc
 
     def save(self, path):
